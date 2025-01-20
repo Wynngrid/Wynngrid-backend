@@ -42,31 +42,6 @@ const upload = multer({
   }
 }).single('profilePic');  // Specify the field name here
 
-// Helper function to validate fields based on service provider type
-// const validateFields = (serviceProviderType, body) => {
-//   const errors = [];
-
-//   if (!body.profilePicUrl) errors.push('Profile picture is required.');
-
-//   if (serviceProviderType === 'Architect' || serviceProviderType === 'Both') {
-//     if (!body.experienceYears) errors.push('Experience years is required for Architect or Both.');
-//     if (!body.graduationInfo) errors.push('Graduation info is required for Architect or Both.');
-//     if (!body.avgProjectArea) errors.push('Average project area is required for Architect or Both.');
-//     if (!body.avgProjectValue) errors.push('Average project value is required for Architect or Both.');
-//     if (!body.projectTypes) errors.push('Project types are required for Architect or Both.');
-//   }
-
-//   if (serviceProviderType === 'Interior Designer' || serviceProviderType === 'Both') {
-//     if (!body.experienceYears) errors.push('Experience years is required for Interior Designer or Both.');
-//     if (!body.graduationInfo) errors.push('Graduation info is required for Interior Designer or Both.');
-//     if (!body.projectTypes) errors.push('Project types are required for Interior Designer or Both.');
-//     if (!body.preferredTimeline) errors.push('Preferred timeline is required for Interior Designer.');
-//     if (!body.avgProjectArea) errors.push('Average project area is required for Interior Designer.');
-//     if (!body.avgProjectValue) errors.push('Average project value is required for Interior Designer.');
-//   }
-
-//   return errors;
-// };
 
 // Complete onboarding profile
 router.post('/complete-profile', authenticateToken, (req, res) => {
@@ -87,26 +62,25 @@ router.post('/complete-profile', authenticateToken, (req, res) => {
       // Upload to Cloudinary
       const profilePicUrl = await uploadToCloudinary(req.file);
 
-      // Parse arrays properly
-      let projectTypes = [];
-      let portfolioUrls = [];
+      let typeOfProjects = [];
 
       try {
-        // Handle projectTypes
-        if (req.body.projectTypes) {
-          projectTypes = Array.isArray(req.body.projectTypes) 
-            ? req.body.projectTypes 
-            : JSON.parse(req.body.projectTypes);
+        // Parse typeOfProjects
+        if (req.body.typeOfProjects) {
+          typeOfProjects = Array.isArray(req.body.typeOfProjects) 
+            ? req.body.typeOfProjects 
+            : JSON.parse(req.body.typeOfProjects);
         }
 
-        // Handle portfolioUrls
-        if (req.body.portfolioUrls) {
-          portfolioUrls = Array.isArray(req.body.portfolioUrls) 
-            ? req.body.portfolioUrls 
-            : JSON.parse(req.body.portfolioUrls);
+        // Validate that typeOfProjects is not empty
+        if (!typeOfProjects.length) {
+          return res.status(400).json({
+            message: 'At least one project type with average area and value is required'
+          });
         }
       } catch (parseError) {
         console.error('Parsing error:', parseError);
+        return res.status(400).json({ message: 'Invalid data format' });
       }
 
       const profile = await prisma.profile.create({
@@ -120,15 +94,24 @@ router.post('/complete-profile', authenticateToken, (req, res) => {
           experienceYears: req.body.experienceYears,
           graduationInfo: req.body.graduationInfo,
           associations: req.body.associations,
-          avgProjectArea: req.body.avgProjectArea,
-          avgProjectValue: req.body.avgProjectValue,
-          projectTypes,
-          portfolioUrls,
+          portfolioUrls: Array.isArray(req.body.portfolioUrls) 
+            ? req.body.portfolioUrls 
+            : JSON.parse(req.body.portfolioUrls),
           websiteUrl: req.body.websiteUrl,
           workSetupPreference: req.body.workSetupPreference,
           preferredTimeline: req.body.preferredTimeline,
           aboutUs: req.body.aboutUs,
-          comments: req.body.comments
+          comments: req.body.comments,
+          projectAverages: {
+            create: typeOfProjects.map(project => ({
+              projectType: project.projectType,
+              avgArea: project.avgArea,
+              avgValue: project.avgValue
+            }))
+          }
+        },
+        include: {
+          projectAverages: true
         }
       });
     // Send confirmation email
@@ -168,6 +151,14 @@ router.get('/profile', authenticateToken, async (req, res) => {
             lastName: true,
             email: true,
           }
+        },
+        projectAverages: {
+          select: {
+            id: true,
+            projectType: true,
+            avgArea: true,
+            avgValue: true
+          }
         }
       }
     });
@@ -178,6 +169,7 @@ router.get('/profile', authenticateToken, async (req, res) => {
 
     res.json(profile);
   } catch (error) {
+    console.error('Error fetching profile:', error);
     res.status(500).json({ 
       message: 'Error fetching profile', 
       error: error.message 
@@ -186,124 +178,141 @@ router.get('/profile', authenticateToken, async (req, res) => {
 });
 
 // Update profile
-router.put('/update-profile', authenticateToken, upload, async (req, res) => {
-  try {
-    let profilePicUrl = undefined;
-    
-    if (req.file) {
-      // Upload new image to Cloudinary if provided
-      profilePicUrl = await uploadToCloudinary(req.file);
+router.put('/update-profile', authenticateToken, (req, res) => {
+  upload(req, res, async function(err) {
+    if (err instanceof multer.MulterError) {
+      return res.status(400).json({ message: err.message });
+    } else if (err) {
+      return res.status(500).json({ message: err.message });
     }
 
-    const {
-      businessName,
-      contactNumber,
-      city,
-      serviceProviderType,
-      experienceYears,
-      graduationInfo,
-      associations,
-      avgProjectArea,
-      avgProjectValue,
-      projectTypes,
-      portfolioUrls,
-      websiteUrl,
-      workSetupPreference,
-      preferredTimeline,
-      aboutUs,
-      comments
-    } = req.body;
-
-    // Validate serviceProviderType
-    const validTypes = ['Architect', 'Interior Designer', 'Architect + Interior Designer'];
-    if (serviceProviderType && !validTypes.includes(serviceProviderType)) {
-      return res.status(400).json({
-        message: 'Invalid serviceProviderType. Must be Architect, Interior Designer, or Both'
-      });
-    }
-
-    // Process portfolio URLs
-    const processedPortfolioUrls = Array.isArray(portfolioUrls) 
-      ? portfolioUrls 
-      : portfolioUrls ? [portfolioUrls] : [];
-
-    // Validate Google Drive URLs
-    const isValidGoogleDriveUrl = (url) => {
-      return url && url.includes('drive.google.com');
-    };
-
-    if (processedPortfolioUrls.some(url => !isValidGoogleDriveUrl(url))) {
-      return res.status(400).json({
-        message: 'Invalid Google Drive URL provided'
-      });
-    }
-
-    const updatedProfile = await prisma.profile.update({
-      where: { userId: req.user.userId },
-      data: {
-        ...(profilePicUrl && { profilePicUrl }), // Only update if new image is uploaded
-        businessName,
-        contactNumber,
-        city,
-        serviceProviderType,
-        experienceYears,
-        graduationInfo,
-        associations,
-        avgProjectArea,
-        avgProjectValue,
-        projectTypes: Array.isArray(projectTypes) ? projectTypes : [projectTypes],
-        portfolioUrls: processedPortfolioUrls,
-        websiteUrl,
-        workSetupPreference,
-        preferredTimeline,
-        aboutUs,
-        comments
+    try {
+      // Debug logging
+      console.log('Received body:', req.body);
+      
+      if (!req.body.data) {
+        return res.status(400).json({ 
+          message: 'Missing data field in request body',
+          receivedBody: req.body
+        });
       }
-    });
-    // Send confirmation email
-    // const user = await prisma.user.findUnique({
-    //   where: { id: req.user.userId }
-    // });
 
-    // await sendEmail(
-    //   user.email,
-    //   'Onboarding Complete',
-    //   'Account is updated'
-    // );
+      // Parse the data field
+      let parsedData;
+      try {
+        parsedData = typeof req.body.data === 'string' 
+          ? JSON.parse(req.body.data)
+          : req.body.data;
 
-    res.json({
-      message: 'Profile updated successfully',
-      profile: updatedProfile
-    });
-    
+        console.log('Parsed data:', parsedData);
+      } catch (error) {
+        console.error('Error parsing data:', error);
+        return res.status(400).json({ 
+          message: 'Invalid JSON data format',
+          details: error.message,
+          receivedData: req.body.data 
+        });
+      }
 
-   
-  } catch (error) {
-    res.status(500).json({ 
-      message: 'Error updating profile', 
-      error: error.message 
-    });
-  }
+      // Handle profile picture update
+      let profilePicUrl;
+      if (req.file) {
+        profilePicUrl = await uploadToCloudinary(req.file);
+      }
+
+      // Validate typeOfProjects
+      if (!parsedData.typeOfProjects || !Array.isArray(parsedData.typeOfProjects) || parsedData.typeOfProjects.length === 0) {
+        return res.status(400).json({
+          message: 'At least one project type with average area and value is required'
+        });
+      }
+
+      // Validate each project type has required fields
+      for (const project of parsedData.typeOfProjects) {
+        if (!project.projectType || !project.avgArea || !project.avgValue) {
+          return res.status(400).json({
+            message: 'Each project type must include projectType, avgArea, and avgValue'
+          });
+        }
+      }
+
+      const updatedProfile = await prisma.profile.update({
+        where: { userId: req.user.userId },
+        data: {
+          ...(profilePicUrl && { profilePicUrl }),
+          businessName: parsedData.businessName,
+          contactNumber: parsedData.contactNumber,
+          city: parsedData.city,
+          serviceProviderType: parsedData.serviceProviderType,
+          experienceYears: parsedData.experienceYears,
+          graduationInfo: parsedData.graduationInfo,
+          associations: parsedData.associations,
+          portfolioUrls: parsedData.portfolioUrls,
+          websiteUrl: parsedData.websiteUrl,
+          workSetupPreference: parsedData.workSetupPreference,
+          preferredTimeline: parsedData.preferredTimeline,
+          aboutUs: parsedData.aboutUs,
+          comments: parsedData.comments,
+          projectAverages: {
+            deleteMany: {},
+            create: parsedData.typeOfProjects.map(project => ({
+              projectType: project.projectType,
+              avgArea: project.avgArea,
+              avgValue: project.avgValue
+            }))
+          }
+        },
+        include: {
+          projectAverages: true
+        }
+      });
+
+      res.json({
+        message: 'Profile updated successfully',
+        profile: updatedProfile
+      });
+    } catch (error) {
+      console.error('Update error:', error);
+      res.status(500).json({ 
+        message: 'Error updating profile', 
+        error: error.message 
+      });
+    }
+  });
 });
 
 // Delete profile
 router.delete('/delete-profile', authenticateToken, async (req, res) => {
   try {
+    // First delete all related project averages
+    await prisma.projectAverage.deleteMany({
+      where: {
+        profile: {
+          userId: req.user.userId
+        }
+      }
+    });
+
+    // Then delete the profile
     await prisma.profile.delete({
       where: { userId: req.user.userId }
     });
 
-    res.json({ message: 'Profile deleted successfully' });
+    // Get user details for email
     const user = await prisma.user.findUnique({
       where: { id: req.user.userId }
     });
 
+    // Send email notification
     await sendEmail(
       user.email,
       'Profile deleted',
       'Profile deleted successfully'
     );
+
+    res.json({ message: 'Profile deleted successfully' });
   } catch (error) {
+    console.error('Delete error:', error);
     res.status(500).json({ 
       message: 'Error deleting profile', 
       error: error.message 
@@ -321,7 +330,18 @@ router.get('/user-details', authenticateToken, async (req, res) => {
         firstName: true,
         lastName: true,
         email: true,
-        profile: true
+        profile: {
+          include: {
+            projectAverages: {
+              select: {
+                id: true,
+                projectType: true,
+                avgArea: true,
+                avgValue: true
+              }
+            }
+          }
+        }
       }
     });
 
@@ -331,6 +351,7 @@ router.get('/user-details', authenticateToken, async (req, res) => {
 
     res.json(userWithProfile);
   } catch (error) {
+    console.error('Error fetching user details:', error);
     res.status(500).json({ 
       message: 'Error fetching user details', 
       error: error.message 
