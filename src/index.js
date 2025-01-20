@@ -23,9 +23,15 @@ app.use('/api/onboarding', onboardingRoutes);
 app.use('/api/projects', projectRoutes);
 app.use('/api/contact', contactRoutes);
 
-// Health check endpoint
+
+// Root route
+app.get('/', (req, res) => {
+  res.json({ message: 'Welcome to the API' });
+});
+
+// Health check route
 app.get('/health', (req, res) => {
-  res.status(200).json({ status: 'healthy' });
+  res.json({ status: 'healthy', timestamp: new Date().toISOString() });
 });
 
 const PORT = process.env.PORT || 3000;
