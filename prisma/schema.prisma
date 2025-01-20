@@ -1,0 +1,76 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id @default(uuid())
+  firstName     String
+  lastName      String
+  email         String    @unique
+  password      String
+  otp           String?
+  otpExpiry     DateTime?
+  isVerified    Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  profile       Profile?
+  projects      Project[]
+}
+
+model Profile {
+  id                    String    @id @default(uuid())
+  userId                String    @unique
+  user                  User      @relation(fields: [userId], references: [id])
+  businessName          String?
+  contactNumber         String
+  city                  String
+  serviceProviderType   String    // Architect, Interior Designer, or Both
+  experienceYears       String
+  graduationInfo        String
+  associations          String?
+  avgProjectArea        String?
+  avgProjectValue       String?
+  projectTypes          String[]
+  portfolioUrls         String[]  // Corrected field name
+  websiteUrl            String?
+  workSetupPreference   String
+  aboutUs               String?
+  comments              String?
+  profilePicUrl         String
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+  preferredTimeline    String?
+}
+
+model Project {
+  id              String    @id @default(uuid())
+  userId          String
+  user            User      @relation(fields: [userId], references: [id])
+  name            String
+  location        String
+  area            Float
+  jobCost         Float
+  projectType     String
+  description     String?
+  images          String[]
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+model Contact {
+  id              String    @id @default(uuid())
+  purpose         String    // Query, Feedback, Support, Business
+  firstName       String
+  lastName        String
+  phoneNumber     String
+  email           String    // Adding email field
+  message         String
+  requireCallback Boolean   @default(false)
+  status          String    @default("pending")
+  createdAt       DateTime  @default(now())
+}
