@@ -338,30 +338,73 @@ router.post('/reset-password', async (req, res) => {
     res.status(500).json({ message: 'Error resetting password', error: error.message });
   }
 });
+
 // Delete Account
 router.delete('/delete-account', async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    // Find the user in the database
-    const user = await prisma.user.findUnique({ where: { email } });
+    // Find the user in the database with all related data
+    const user = await prisma.user.findUnique({ 
+      where: { email },
+      include: {
+        profile: {
+          include: {
+            projectAverages: true
+          }
+        },
+        projects: true // Include user's projects
+      }
+    });
+
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
 
-    // Validate password (if password validation is required)
+    // Validate password
     const validPassword = await bcrypt.compare(password, user.password);
     if (!validPassword) {
       return res.status(400).json({ message: 'Invalid password' });
     }
 
-    // Delete the user
-    await prisma.user.delete({ where: { email } });
+    // Delete in the correct order to handle all foreign key constraints
+    await prisma.$transaction(async (prisma) => {
+      // 1. Delete all project averages if profile exists
+      if (user.profile) {
+        await prisma.projectAverage.deleteMany({
+          where: {
+            profileId: user.profile.id
+          }
+        });
+      }
+
+      // 2. Delete all projects associated with the user
+      await prisma.project.deleteMany({
+        where: {
+          userId: user.id
+        }
+      });
+
+      // 3. Delete the profile if it exists
+      if (user.profile) {
+        await prisma.profile.delete({
+          where: { userId: user.id }
+        });
+      }
+
+      // 4. Finally delete the user
+      await prisma.user.delete({
+        where: { id: user.id }
+      });
+    });
 
     res.json({ message: 'Account deleted successfully' });
   } catch (error) {
     console.error('Error during account deletion:', error);
-    res.status(500).json({ message: 'Error deleting account', error: error.message });
+    res.status(500).json({ 
+      message: 'Error deleting account', 
+      error: error.message 
+    });
   }
 });
 // Logout
