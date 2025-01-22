@@ -193,57 +193,74 @@ router.put('/update-profile', authenticateToken, (req, res) => {
       // console.log('Received body:', req.body);
       // console.log('Received files:', req.files);
 
-      // Parse arrays that are sent as strings
-      const typeOfProjects = typeof req.body.typeOfProjects === 'string' 
-        ? JSON.parse(req.body.typeOfProjects)
-        : req.body.typeOfProjects;
+      // Get existing profile first
+      const existingProfile = await prisma.profile.findUnique({
+        where: { userId: req.user.userId },
+        include: { projectAverages: true }
+      });
 
-      const portfolioUrls = typeof req.body.portfolioUrls === 'string'
-        ? JSON.parse(req.body.portfolioUrls)
-        : req.body.portfolioUrls;
+      if (!existingProfile) {
+        return res.status(404).json({ message: 'Profile not found' });
+      }
+
+      // Prepare update data
+      let updateData = {};
 
       // Handle profile picture update
-      let profilePicUrl;
       if (req.files && req.files.profilePic) {
-        profilePicUrl = await uploadToCloudinary(req.files.profilePic[0]);
+        updateData.profilePicUrl = await uploadToCloudinary(req.files.profilePic[0]);
       }
 
       // Handle banner images update
-      let professionalBannerImages;
       if (req.files && req.files.professionalBannerImages) {
-        const uploadPromises = req.files.professionalBannerImages.map(file => 
-          uploadToCloudinary(file)
+        const newBannerUrls = await Promise.all(
+          req.files.professionalBannerImages.map(file => uploadToCloudinary(file))
         );
-        professionalBannerImages = await Promise.all(uploadPromises);
+        updateData.professionalBannerImages = [
+          ...existingProfile.professionalBannerImages,
+          ...newBannerUrls
+        ];
+      }
+
+      // Handle other fields only if they are provided
+      if (req.body.businessName) updateData.businessName = req.body.businessName;
+      if (req.body.contactNumber) updateData.contactNumber = req.body.contactNumber;
+      if (req.body.city) updateData.city = req.body.city;
+      if (req.body.serviceProviderType) updateData.serviceProviderType = req.body.serviceProviderType;
+      if (req.body.experienceYears) updateData.experienceYears = req.body.experienceYears;
+      if (req.body.graduationInfo) updateData.graduationInfo = req.body.graduationInfo;
+      if (req.body.associations) updateData.associations = req.body.associations;
+      if (req.body.websiteUrl) updateData.websiteUrl = req.body.websiteUrl;
+      if (req.body.workSetupPreference) updateData.workSetupPreference = req.body.workSetupPreference;
+      if (req.body.preferredTimeline) updateData.preferredTimeline = req.body.preferredTimeline;
+      if (req.body.aboutUs) updateData.aboutUs = req.body.aboutUs;
+      if (req.body.comments) updateData.comments = req.body.comments;
+
+      // Handle arrays
+      if (req.body.portfolioUrls) {
+        updateData.portfolioUrls = typeof req.body.portfolioUrls === 'string' 
+          ? JSON.parse(req.body.portfolioUrls)
+          : req.body.portfolioUrls;
+      }
+
+      if (req.body.typeOfProjects) {
+        const typeOfProjects = typeof req.body.typeOfProjects === 'string'
+          ? JSON.parse(req.body.typeOfProjects)
+          : req.body.typeOfProjects;
+
+        updateData.projectAverages = {
+          deleteMany: {},
+          create: typeOfProjects.map(project => ({
+            projectType: project.projectType,
+            avgArea: project.avgArea,
+            avgValue: project.avgValue
+          }))
+        };
       }
 
       const updatedProfile = await prisma.profile.update({
         where: { userId: req.user.userId },
-        data: {
-          ...(profilePicUrl && { profilePicUrl }),
-          ...(professionalBannerImages && { professionalBannerImages }),
-          businessName: req.body.businessName,
-          contactNumber: req.body.contactNumber,
-          city: req.body.city,
-          serviceProviderType: req.body.serviceProviderType,
-          experienceYears: req.body.experienceYears,
-          graduationInfo: req.body.graduationInfo,
-          associations: req.body.associations,
-          portfolioUrls: portfolioUrls,
-          websiteUrl: req.body.websiteUrl,
-          workSetupPreference: req.body.workSetupPreference,
-          preferredTimeline: req.body.preferredTimeline,
-          aboutUs: req.body.aboutUs,
-          comments: req.body.comments,
-          projectAverages: {
-            deleteMany: {},
-            create: typeOfProjects.map(project => ({
-              projectType: project.projectType,
-              avgArea: project.avgArea,
-              avgValue: project.avgValue
-            }))
-          }
-        },
+        data: updateData,
         include: {
           projectAverages: true
         }
@@ -336,6 +353,49 @@ router.get('/user-details', authenticateToken, async (req, res) => {
     console.error('Error fetching user details:', error);
     res.status(500).json({ 
       message: 'Error fetching user details', 
+      error: error.message 
+    });
+  }
+});
+
+// New route to delete banner image by index
+router.delete('/delete-banner-image/:index', authenticateToken, async (req, res) => {
+  try {
+    const index = parseInt(req.params.index);
+    
+    // Get existing profile
+    const profile = await prisma.profile.findUnique({
+      where: { userId: req.user.userId }
+    });
+
+    if (!profile) {
+      return res.status(404).json({ message: 'Profile not found' });
+    }
+
+    // Validate index
+    if (index < 0 || index >= profile.professionalBannerImages.length) {
+      return res.status(400).json({ message: 'Invalid image index' });
+    }
+
+    // Remove image at specified index
+    const updatedBannerImages = profile.professionalBannerImages.filter((_, i) => i !== index);
+
+    // Update profile
+    const updatedProfile = await prisma.profile.update({
+      where: { userId: req.user.userId },
+      data: {
+        professionalBannerImages: updatedBannerImages
+      }
+    });
+
+    res.json({
+      message: 'Banner image deleted successfully',
+      profile: updatedProfile
+    });
+  } catch (error) {
+    console.error('Delete banner image error:', error);
+    res.status(500).json({ 
+      message: 'Error deleting banner image', 
       error: error.message 
     });
   }
