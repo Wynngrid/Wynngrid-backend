@@ -71,12 +71,12 @@ router.post('/', authenticateToken, upload.array('images', 10), async (req, res)
     }
 
     // Validate project type
-    if (!validateProjectType(projectType)) {
-      return res.status(400).json({
-        message: 'Invalid project type',
-        validTypes: ['Commercial', 'Residential', 'Other']
-      });
-    }
+    // if (!validateProjectType(projectType)) {
+    //   return res.status(400).json({
+    //     message: 'Invalid project type',
+    //     validTypes: ['Commercial', 'Residential', 'Other']
+    //   });
+    // }
 
     // Validate number of images
     if (!req.files || req.files.length < 2) {
@@ -146,12 +146,12 @@ router.put('/:id', authenticateToken, upload.array('images', 10), async (req, re
     }
 
     // Validate project type if provided
-    if (projectType && !validateProjectType(projectType)) {
-      return res.status(400).json({
-        message: 'Invalid project type',
-        validTypes: ['Commercial', 'Residential', 'Other']
-      });
-    }
+    // if (projectType && !validateProjectType(projectType)) {
+    //   return res.status(400).json({
+    //     message: 'Invalid project type',
+    //     validTypes: ['Commercial', 'Residential', 'Other']
+    //   });
+    // }
 
     // Handle new images if provided
     let imageUrls = existingProject.images;
@@ -167,11 +167,11 @@ router.put('/:id', authenticateToken, upload.array('images', 10), async (req, re
     }
 
     // Ensure minimum 2 images requirement is met
-    if (imageUrls.length < 2) {
-      return res.status(400).json({
-        message: 'Minimum 2 images required'
-      });
-    }
+    // if (imageUrls.length < 2) {
+    //   return res.status(400).json({
+    //     message: 'Minimum 2 images required'
+    //   });
+    // }
 
     const project = await prisma.project.update({
       where: { id: req.params.id },
