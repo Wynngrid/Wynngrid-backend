@@ -23,26 +23,27 @@ model User {
 }
 
 model Profile {
-  id                    String    @id @default(uuid())
-  userId                String    @unique
-  user                  User      @relation(fields: [userId], references: [id])
-  businessName          String?
-  contactNumber         String
-  city                  String
-  serviceProviderType   String
-  experienceYears       String
-  graduationInfo        String
-  associations          String?
-  portfolioUrls         String[]
-  websiteUrl            String?
-  workSetupPreference   String
-  aboutUs               String?
-  comments              String?
-  profilePicUrl         String
-  createdAt            DateTime  @default(now())
-  updatedAt            DateTime  @updatedAt
-  preferredTimeline    String?
-  projectAverages      ProjectAverage[]
+  id                      String    @id @default(uuid())
+  userId                  String    @unique
+  user                    User      @relation(fields: [userId], references: [id])
+  businessName            String?
+  contactNumber           String
+  city                    String
+  serviceProviderType     String
+  experienceYears         String
+  graduationInfo          String
+  associations            String?
+  portfolioUrls           String[]
+  professionalBannerImages String[]  @default([])
+  websiteUrl              String?
+  workSetupPreference     String
+  aboutUs                 String?
+  comments                String?
+  profilePicUrl           String
+  createdAt              DateTime   @default(now())
+  updatedAt              DateTime   @updatedAt
+  preferredTimeline      String?
+  projectAverages        ProjectAverage[]
 }
 
 model Project {

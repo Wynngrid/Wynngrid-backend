@@ -38,10 +38,12 @@ const upload = multer({
   storage: storage,
   fileFilter: fileFilter,
   limits: {
-    fileSize: 5 * 1024 * 1024 // 5MB
+    fileSize: 5 * 1024 * 1024 // 5MB per file
   }
-}).single('profilePic');  // Specify the field name here
-
+}).fields([
+  { name: 'profilePic', maxCount: 1 },
+  { name: 'professionalBannerImages', maxCount: 5 } // Allow up to 5 banner images
+]);
 
 // Complete onboarding profile
 router.post('/complete-profile', authenticateToken, (req, res) => {
@@ -53,40 +55,42 @@ router.post('/complete-profile', authenticateToken, (req, res) => {
     }
 
     try {
-      if (!req.file) {
+      // Debug logging
+      // console.log('Received body:', req.body);
+      // console.log('Received files:', req.files);
+
+      if (!req.files || !req.files.profilePic) {
         return res.status(400).json({
           message: 'Profile picture is required'
         });
       }
 
-      // Upload to Cloudinary
-      const profilePicUrl = await uploadToCloudinary(req.file);
+      // Parse arrays that are sent as strings
+      const typeOfProjects = typeof req.body.typeOfProjects === 'string' 
+        ? JSON.parse(req.body.typeOfProjects)
+        : req.body.typeOfProjects;
 
-      let typeOfProjects = [];
+      const portfolioUrls = typeof req.body.portfolioUrls === 'string'
+        ? JSON.parse(req.body.portfolioUrls)
+        : req.body.portfolioUrls;
 
-      try {
-        // Parse typeOfProjects
-        if (req.body.typeOfProjects) {
-          typeOfProjects = Array.isArray(req.body.typeOfProjects) 
-            ? req.body.typeOfProjects 
-            : JSON.parse(req.body.typeOfProjects);
-        }
+      // Upload profile picture to Cloudinary
+      const profilePicUrl = await uploadToCloudinary(req.files.profilePic[0]);
 
-        // Validate that typeOfProjects is not empty
-        if (!typeOfProjects.length) {
-          return res.status(400).json({
-            message: 'At least one project type with average area and value is required'
-          });
-        }
-      } catch (parseError) {
-        console.error('Parsing error:', parseError);
-        return res.status(400).json({ message: 'Invalid data format' });
+      // Upload banner images to Cloudinary if provided
+      let professionalBannerImages = [];
+      if (req.files.professionalBannerImages) {
+        const uploadPromises = req.files.professionalBannerImages.map(file => 
+          uploadToCloudinary(file)
+        );
+        professionalBannerImages = await Promise.all(uploadPromises);
       }
 
       const profile = await prisma.profile.create({
         data: {
           userId: req.user.userId,
           profilePicUrl,
+          professionalBannerImages,
           businessName: req.body.businessName,
           contactNumber: req.body.contactNumber,
           city: req.body.city,
@@ -94,9 +98,7 @@ router.post('/complete-profile', authenticateToken, (req, res) => {
           experienceYears: req.body.experienceYears,
           graduationInfo: req.body.graduationInfo,
           associations: req.body.associations,
-          portfolioUrls: Array.isArray(req.body.portfolioUrls) 
-            ? req.body.portfolioUrls 
-            : JSON.parse(req.body.portfolioUrls),
+          portfolioUrls: portfolioUrls,
           websiteUrl: req.body.websiteUrl,
           workSetupPreference: req.body.workSetupPreference,
           preferredTimeline: req.body.preferredTimeline,
@@ -114,10 +116,11 @@ router.post('/complete-profile', authenticateToken, (req, res) => {
           projectAverages: true
         }
       });
-    // Send confirmation email
-    const user = await prisma.user.findUnique({
-      where: { id: req.user.userId }
-    });
+
+      // Send confirmation email
+      const user = await prisma.user.findUnique({
+        where: { id: req.user.userId }
+      });
 
     await sendEmail(
       user.email,
@@ -187,75 +190,54 @@ router.put('/update-profile', authenticateToken, (req, res) => {
     }
 
     try {
-      // Debug logging
-      console.log('Received body:', req.body);
-      
-      if (!req.body.data) {
-        return res.status(400).json({ 
-          message: 'Missing data field in request body',
-          receivedBody: req.body
-        });
-      }
+      // console.log('Received body:', req.body);
+      // console.log('Received files:', req.files);
 
-      // Parse the data field
-      let parsedData;
-      try {
-        parsedData = typeof req.body.data === 'string' 
-          ? JSON.parse(req.body.data)
-          : req.body.data;
+      // Parse arrays that are sent as strings
+      const typeOfProjects = typeof req.body.typeOfProjects === 'string' 
+        ? JSON.parse(req.body.typeOfProjects)
+        : req.body.typeOfProjects;
 
-        console.log('Parsed data:', parsedData);
-      } catch (error) {
-        console.error('Error parsing data:', error);
-        return res.status(400).json({ 
-          message: 'Invalid JSON data format',
-          details: error.message,
-          receivedData: req.body.data 
-        });
-      }
+      const portfolioUrls = typeof req.body.portfolioUrls === 'string'
+        ? JSON.parse(req.body.portfolioUrls)
+        : req.body.portfolioUrls;
 
       // Handle profile picture update
       let profilePicUrl;
-      if (req.file) {
-        profilePicUrl = await uploadToCloudinary(req.file);
+      if (req.files && req.files.profilePic) {
+        profilePicUrl = await uploadToCloudinary(req.files.profilePic[0]);
       }
 
-      // Validate typeOfProjects
-      if (!parsedData.typeOfProjects || !Array.isArray(parsedData.typeOfProjects) || parsedData.typeOfProjects.length === 0) {
-        return res.status(400).json({
-          message: 'At least one project type with average area and value is required'
-        });
-      }
-
-      // Validate each project type has required fields
-      for (const project of parsedData.typeOfProjects) {
-        if (!project.projectType || !project.avgArea || !project.avgValue) {
-          return res.status(400).json({
-            message: 'Each project type must include projectType, avgArea, and avgValue'
-          });
-        }
+      // Handle banner images update
+      let professionalBannerImages;
+      if (req.files && req.files.professionalBannerImages) {
+        const uploadPromises = req.files.professionalBannerImages.map(file => 
+          uploadToCloudinary(file)
+        );
+        professionalBannerImages = await Promise.all(uploadPromises);
       }
 
       const updatedProfile = await prisma.profile.update({
         where: { userId: req.user.userId },
         data: {
           ...(profilePicUrl && { profilePicUrl }),
-          businessName: parsedData.businessName,
-          contactNumber: parsedData.contactNumber,
-          city: parsedData.city,
-          serviceProviderType: parsedData.serviceProviderType,
-          experienceYears: parsedData.experienceYears,
-          graduationInfo: parsedData.graduationInfo,
-          associations: parsedData.associations,
-          portfolioUrls: parsedData.portfolioUrls,
-          websiteUrl: parsedData.websiteUrl,
-          workSetupPreference: parsedData.workSetupPreference,
-          preferredTimeline: parsedData.preferredTimeline,
-          aboutUs: parsedData.aboutUs,
-          comments: parsedData.comments,
+          ...(professionalBannerImages && { professionalBannerImages }),
+          businessName: req.body.businessName,
+          contactNumber: req.body.contactNumber,
+          city: req.body.city,
+          serviceProviderType: req.body.serviceProviderType,
+          experienceYears: req.body.experienceYears,
+          graduationInfo: req.body.graduationInfo,
+          associations: req.body.associations,
+          portfolioUrls: portfolioUrls,
+          websiteUrl: req.body.websiteUrl,
+          workSetupPreference: req.body.workSetupPreference,
+          preferredTimeline: req.body.preferredTimeline,
+          aboutUs: req.body.aboutUs,
+          comments: req.body.comments,
           projectAverages: {
             deleteMany: {},
-            create: parsedData.typeOfProjects.map(project => ({
+            create: typeOfProjects.map(project => ({
               projectType: project.projectType,
               avgArea: project.avgArea,
               avgValue: project.avgValue
