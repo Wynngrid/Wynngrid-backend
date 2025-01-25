@@ -26,7 +26,7 @@ model Profile {
   id                      String    @id @default(uuid())
   userId                  String    @unique
   user                    User      @relation(fields: [userId], references: [id])
-  fullName                String?   // Make it optional with ?
+  fullName                String?
   preferredWorkLocations  String[]  // New required field
   businessName            String?
   contactNumber           String
