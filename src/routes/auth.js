@@ -57,7 +57,7 @@ router.post('/signup', async (req, res) => {
     });
 
     // Send email with OTP
-    await sendEmail(email, 'Verify your email', `Your OTP is: ${otp} .This OTP is valid until ${otpExpiry}.Please use it to verify your email address.`);
+    await sendEmail(email, 'Verify your email', `Your OTP is: ${otp} .This OTP is valid for 10 minutes.Please use it to verify your email address.`);
 
     res.status(201).json({ message: 'User created. Please verify your email.' });
   } catch (error) {
@@ -143,7 +143,7 @@ router.post('/forgot-password', async (req, res) => {
       data: { otp, otpExpiry },
     });
 
-    await sendEmail(email, 'Reset Password', `Your password reset OTP is: ${otp}. This OTP is valid until ${otpExpiry}. Please use it to reset your password.`);
+    await sendEmail(email, 'Reset Password', `Your password reset OTP is: ${otp}. This OTP is valid for 10 minutes. Please use it to reset your password.`);
 
     res.json({ message: 'Password reset OTP sent to email' });
   } catch (error) {
