@@ -64,9 +64,10 @@ router.post('/complete-profile', authenticateToken, (req, res) => {
         });
       }
 
-      if (!req.body.fullName || !req.body.preferredWorkLocations) {
+      // Only check for preferredWorkLocations
+      if (!req.body.preferredWorkLocations) {
         return res.status(400).json({
-          message: 'fullName and preferredWorkLocations are required'
+          message: 'preferredWorkLocations is required'
         });
       }
 
@@ -114,14 +115,10 @@ router.post('/complete-profile', authenticateToken, (req, res) => {
         professionalBannerImages = await Promise.all(uploadPromises);
       }
 
-      const user = await prisma.user.findUnique({
-        where: { id: req.user.userId }
-      });
-
       const profile = await prisma.profile.create({
         data: {
           userId: req.user.userId,
-          fullName: `${user.firstName} ${user.lastName}`,
+          fullName: req.body.fullName,
           preferredWorkLocations,
           profilePicUrl,
           professionalBannerImages,
@@ -152,11 +149,15 @@ router.post('/complete-profile', authenticateToken, (req, res) => {
       });
 
       // Send confirmation email
-      await sendEmail(
-        user.email,
-        'Onboarding Complete',
-        'Thank you for completing your onboarding process. We appreciate you believing in us!'
-      );
+      const user = await prisma.user.findUnique({
+        where: { id: req.user.userId }
+      });
+
+    await sendEmail(
+      user.email,
+      'Onboarding Complete',
+      'Thank you for completing your onboarding process. We appreciate you believing in us!'
+    );
       res.status(201).json({
         message: 'Profile completed successfully',
         profile
@@ -220,43 +221,85 @@ router.put('/update-profile', authenticateToken, (req, res) => {
     }
 
     try {
+      // console.log('Received body:', req.body);
+      // console.log('Received files:', req.files);
+
+      // Get existing profile first
+      const existingProfile = await prisma.profile.findUnique({
+        where: { userId: req.user.userId },
+        include: { projectAverages: true }
+      });
+
+      if (!existingProfile) {
+        return res.status(404).json({ message: 'Profile not found' });
+      }
+
+      // Prepare update data
+      let updateData = {};
+
+      // Handle profile picture update
+      if (req.files && req.files.profilePic) {
+        updateData.profilePicUrl = await uploadToCloudinary(req.files.profilePic[0]);
+      }
+
+      // Handle banner images update
+      if (req.files && req.files.professionalBannerImages) {
+        const newBannerUrls = await Promise.all(
+          req.files.professionalBannerImages.map(file => uploadToCloudinary(file))
+        );
+        updateData.professionalBannerImages = [
+          ...existingProfile.professionalBannerImages,
+          ...newBannerUrls
+        ];
+      }
+
+      // Handle other fields only if they are provided
+      if (req.body.businessName) updateData.businessName = req.body.businessName;
+      if (req.body.contactNumber) updateData.contactNumber = req.body.contactNumber;
+      if (req.body.city) updateData.city = req.body.city;
+      if (req.body.serviceProviderType) updateData.serviceProviderType = req.body.serviceProviderType;
+      if (req.body.experienceYears) updateData.experienceYears = req.body.experienceYears;
+      if (req.body.graduationInfo) updateData.graduationInfo = req.body.graduationInfo;
+      if (req.body.associations) updateData.associations = req.body.associations;
+      if (req.body.websiteUrl) updateData.websiteUrl = req.body.websiteUrl;
+      if (req.body.workSetupPreference) updateData.workSetupPreference = req.body.workSetupPreference;
+      if (req.body.preferredTimeline) updateData.preferredTimeline = req.body.preferredTimeline;
+      if (req.body.aboutUs) updateData.aboutUs = req.body.aboutUs;
+      if (req.body.comments) updateData.comments = req.body.comments;
+
+      // Handle arrays
+      if (req.body.portfolioUrls) {
+        updateData.portfolioUrls = typeof req.body.portfolioUrls === 'string' 
+          ? JSON.parse(req.body.portfolioUrls)
+          : req.body.portfolioUrls;
+      }
+
+      if (req.body.typeOfProjects) {
+        const typeOfProjects = typeof req.body.typeOfProjects === 'string'
+          ? JSON.parse(req.body.typeOfProjects)
+          : req.body.typeOfProjects;
+
+        updateData.projectAverages = {
+          deleteMany: {},
+          create: typeOfProjects.map(project => ({
+            projectType: project.projectType,
+            avgArea: project.avgArea,
+            avgValue: project.avgValue
+          }))
+        };
+      }
+
+      // Handle new required fields if provided
+      if (req.body.fullName) updateData.fullName = req.body.fullName;
+      if (req.body.preferredWorkLocations) {
+        updateData.preferredWorkLocations = typeof req.body.preferredWorkLocations === 'string'
+          ? JSON.parse(req.body.preferredWorkLocations)
+          : req.body.preferredWorkLocations;
+      }
+
       const updatedProfile = await prisma.profile.update({
-        where: {
-          userId: req.user.userId
-        },
-        data: {
-          ...(req.body.fullName && { fullName: req.body.fullName }),
-          ...(req.body.preferredWorkLocations && { preferredWorkLocations: req.body.preferredWorkLocations }),
-          ...(req.body.businessName && { businessName: req.body.businessName }),
-          ...(req.body.contactNumber && { contactNumber: req.body.contactNumber }),
-          ...(req.body.city && { city: req.body.city }),
-          ...(req.body.serviceProviderType && { serviceProviderType: req.body.serviceProviderType }),
-          ...(req.body.experienceYears && { experienceYears: req.body.experienceYears }),
-          ...(req.body.graduationInfo && { graduationInfo: req.body.graduationInfo }),
-          ...(req.body.associations && { associations: req.body.associations }),
-          ...(req.body.websiteUrl && { websiteUrl: req.body.websiteUrl }),
-          ...(req.body.workSetupPreference && { workSetupPreference: req.body.workSetupPreference }),
-          ...(req.body.preferredTimeline && { preferredTimeline: req.body.preferredTimeline }),
-          ...(req.body.aboutUs && { aboutUs: req.body.aboutUs }),
-          ...(req.body.comments && { comments: req.body.comments }),
-          ...(req.body.portfolioUrls && { portfolioUrls: req.body.portfolioUrls }),
-          ...(req.body.typeOfProjects && {
-            projectAverages: {
-              deleteMany: {},
-              create: req.body.typeOfProjects.map(project => ({
-                projectType: project.projectType,
-                avgArea: project.avgArea,
-                avgValue: project.avgValue
-              }))
-            }
-          }),
-          ...(req.files && req.files.profilePic && { profilePicUrl: await uploadToCloudinary(req.files.profilePic[0]) }),
-          ...(req.files && req.files.professionalBannerImages && {
-            professionalBannerImages: await Promise.all(
-              req.files.professionalBannerImages.map(file => uploadToCloudinary(file))
-            )
-          })
-        },
+        where: { userId: req.user.userId },
+        data: updateData,
         include: {
           projectAverages: true
         }
