@@ -33,14 +33,39 @@ router.post('/signup', async (req, res) => {
 
     // Check if user already exists
     const existingUser = await prisma.user.findUnique({ where: { email } });
-    if (existingUser) {
-      return res.status(400).json({ message: 'Email already registered' });
+    
+    // If user exists but is not verified, update their details and send new OTP
+    if (existingUser && !existingUser.isVerified) {
+      const hashedPassword = await bcrypt.hash(password, 10);
+      const otp = Math.floor(100000 + Math.random() * 900000).toString();
+      const otpExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+
+      await prisma.user.update({
+        where: { email },
+        data: {
+          firstName,
+          lastName,
+          password: hashedPassword,
+          otp,
+          otpExpiry,
+        },
+      });
+
+      // Send email with new OTP
+      await sendEmail(email, 'Verify your email', `Your OTP is: ${otp}. This OTP is valid for 10 minutes. Please use it to verify your email address.`);
+
+      return res.status(200).json({ 
+        message: 'New verification OTP has been sent to your email.' 
+      });
     }
 
-    // Hash password
-    const hashedPassword = await bcrypt.hash(password, 10);
+    // If user exists and is verified, return error
+    if (existingUser && existingUser.isVerified) {
+      return res.status(400).json({ message: 'Email already registered and verified' });
+    }
 
-    // Generate OTP
+    // If user doesn't exist, continue with normal signup process
+    const hashedPassword = await bcrypt.hash(password, 10);
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     const otpExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
 
@@ -57,7 +82,7 @@ router.post('/signup', async (req, res) => {
     });
 
     // Send email with OTP
-    await sendEmail(email, 'Verify your email', `Your OTP is: ${otp} .This OTP is valid for 10 minutes.Please use it to verify your email address.`);
+    await sendEmail(email, 'Verify your email', `Your OTP is: ${otp}. This OTP is valid for 10 minutes. Please use it to verify your email address.`);
 
     res.status(201).json({ message: 'User created. Please verify your email.' });
   } catch (error) {
