@@ -55,9 +55,8 @@ router.post('/complete-profile', authenticateToken, (req, res) => {
     }
 
     try {
-      // Debug logging
-      // console.log('Received body:', req.body);
-      // console.log('Received files:', req.files);
+      console.log('Received body:', req.body);
+      console.log('Received files:', req.files);
 
       if (!req.files || !req.files.profilePic) {
         return res.status(400).json({
@@ -65,14 +64,43 @@ router.post('/complete-profile', authenticateToken, (req, res) => {
         });
       }
 
-      // Parse arrays that are sent as strings
-      const typeOfProjects = typeof req.body.typeOfProjects === 'string' 
-        ? JSON.parse(req.body.typeOfProjects)
-        : req.body.typeOfProjects;
+      if (!req.body.fullName || !req.body.preferredWorkLocations) {
+        return res.status(400).json({
+          message: 'fullName and preferredWorkLocations are required'
+        });
+      }
 
-      const portfolioUrls = typeof req.body.portfolioUrls === 'string'
-        ? JSON.parse(req.body.portfolioUrls)
-        : req.body.portfolioUrls;
+      // Parse arrays with better error handling
+      let preferredWorkLocations = [];
+      let portfolioUrls = [];
+      let typeOfProjects = [];
+
+      try {
+        preferredWorkLocations = typeof req.body.preferredWorkLocations === 'string'
+          ? JSON.parse(req.body.preferredWorkLocations)
+          : req.body.preferredWorkLocations;
+
+        portfolioUrls = typeof req.body.portfolioUrls === 'string'
+          ? JSON.parse(req.body.portfolioUrls)
+          : req.body.portfolioUrls || [];
+
+        typeOfProjects = typeof req.body.typeOfProjects === 'string'
+          ? JSON.parse(req.body.typeOfProjects)
+          : req.body.typeOfProjects;
+      } catch (parseError) {
+        console.error('Error parsing arrays:', parseError);
+        return res.status(400).json({ 
+          message: 'Invalid array format', 
+          error: parseError.message 
+        });
+      }
+
+      // Validate arrays
+      if (!Array.isArray(preferredWorkLocations) || !Array.isArray(portfolioUrls)) {
+        return res.status(400).json({ 
+          message: 'preferredWorkLocations and portfolioUrls must be arrays' 
+        });
+      }
 
       // Upload profile picture to Cloudinary
       const profilePicUrl = await uploadToCloudinary(req.files.profilePic[0]);
@@ -89,6 +117,8 @@ router.post('/complete-profile', authenticateToken, (req, res) => {
       const profile = await prisma.profile.create({
         data: {
           userId: req.user.userId,
+          fullName: req.body.fullName,
+          preferredWorkLocations,
           profilePicUrl,
           professionalBannerImages,
           businessName: req.body.businessName,
@@ -98,7 +128,7 @@ router.post('/complete-profile', authenticateToken, (req, res) => {
           experienceYears: req.body.experienceYears,
           graduationInfo: req.body.graduationInfo,
           associations: req.body.associations,
-          portfolioUrls: portfolioUrls,
+          portfolioUrls, // Now properly parsed as array
           websiteUrl: req.body.websiteUrl,
           workSetupPreference: req.body.workSetupPreference,
           preferredTimeline: req.body.preferredTimeline,
@@ -256,6 +286,14 @@ router.put('/update-profile', authenticateToken, (req, res) => {
             avgValue: project.avgValue
           }))
         };
+      }
+
+      // Handle new required fields if provided
+      if (req.body.fullName) updateData.fullName = req.body.fullName;
+      if (req.body.preferredWorkLocations) {
+        updateData.preferredWorkLocations = typeof req.body.preferredWorkLocations === 'string'
+          ? JSON.parse(req.body.preferredWorkLocations)
+          : req.body.preferredWorkLocations;
       }
 
       const updatedProfile = await prisma.profile.update({
