@@ -396,4 +396,61 @@ router.post('/google-signup', async (req, res) => {
   }
 });
 
+// Google Sign-in
+router.post('/google-signin', async (req, res) => {
+  try {
+    const { token } = req.body;
+
+    // Verify Google token
+    const ticket = await client.verifyIdToken({
+      idToken: token,
+      audience: process.env.GOOGLE_CLIENT_ID
+    });
+
+    const payload = ticket.getPayload();
+    
+    if (!payload || !payload.email) {
+      return res.status(400).json({ 
+        message: 'Invalid Google token or missing email' 
+      });
+    }
+
+    const { email } = payload;
+
+    // Find user in database
+    const user = await prisma.user.findUnique({ 
+      where: { email }
+    });
+
+    // If user doesn't exist, return error
+    if (!user) {
+      return res.status(404).json({ 
+        message: 'No account found with this Google email. Please sign up first.' 
+      });
+    }
+
+    // Generate JWT token
+    const jwtToken = jwt.sign({ userId: user.id }, process.env.JWT_SECRET, { expiresIn: '240h' });
+
+    // Return success response with token and user data
+    res.json({
+      message: 'Successfully signed in with Google',
+      token: jwtToken,
+      user: {
+        id: user.id,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName
+      }
+    });
+
+  } catch (error) {
+    console.error('Google signin error:', error);
+    res.status(500).json({ 
+      message: 'Error during Google signin', 
+      error: error.message 
+    });
+  }
+});
+
 export default router;
