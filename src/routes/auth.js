@@ -304,22 +304,115 @@ router.post('/logout', async (req, res) => {
 });
 
 // Google Sign-up
-router.post('/google-signup', async (req, res) => {
+// router.post('/google-signup', async (req, res) => {
+//   try {
+//     const { token } = req.body;
+
+//     // Verify Google token
+//     const ticket = await client.verifyIdToken({
+//       idToken: token,
+//       audience: process.env.GOOGLE_CLIENT_ID
+//     });
+
+//     const payload = ticket.getPayload();
+//     console.log('Google payload:', payload); // Debug log
+
+//     if (!payload || !payload.email) {
+//       return res.status(400).json({ 
+//         message: 'Invalid Google token or missing email' 
+//       });
+//     }
+
+//     const { email, name, given_name, family_name } = payload;
+
+//     // Check if user exists
+//     let user = await prisma.user.findUnique({ where: { email } });
+
+//     if (user) {
+//       // If user exists, generate token and return
+//       const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET, { expiresIn: '24h' });
+//       return res.json({ 
+//         message: 'User already exists',
+//         token,
+//         user: {
+//           id: user.id,
+//           email: user.email,
+//           firstName: user.firstName,
+//           lastName: user.lastName
+//         }
+//       });
+//     }
+
+//     // Handle name fields with fallbacks
+//     let firstName = '';
+//     let lastName = '';
+
+//     if (given_name && family_name) {
+//       // Use given_name and family_name if available
+//       firstName = given_name;
+//       lastName = family_name;
+//     } else if (name) {
+//       // Fall back to splitting full name if available
+//       const nameParts = name.split(' ');
+//       firstName = nameParts[0] || '';
+//       lastName = nameParts.slice(1).join(' ') || '';
+//     } else {
+//       // Last resort: use email prefix as firstName
+//       firstName = email.split('@')[0];
+//       lastName = '';
+//     }
+
+//     // Create new user
+//     user = await prisma.user.create({
+//       data: {
+//         email,
+//         firstName,
+//         lastName,
+//         password: '', // Empty password for Google users
+//         isVerified: true // Google accounts are pre-verified
+//       }
+//     });
+
+//     // Generate JWT token
+//     const jwtToken = jwt.sign({ userId: user.id }, process.env.JWT_SECRET, { expiresIn: '24h' });
+
+//     res.status(201).json({
+//       message: 'User created successfully',
+//       token: jwtToken,
+//       user: {
+//         id: user.id,
+//         email: user.email,
+//         firstName: user.firstName,
+//         lastName: user.lastName
+//       }
+//     });
+//   } catch (error) {
+//     console.error('Google signup error:', error);
+//     console.error('Error details:', error.stack); // Add stack trace for debugging
+//     res.status(500).json({ 
+//       message: 'Error during Google signup', 
+//       error: error.message 
+//     });
+//   }
+// });
+
+// Google Sign-up/Login
+router.post('/google-auth', async (req, res) => {
   try {
     const { token } = req.body;
 
     // Verify Google token
     const ticket = await client.verifyIdToken({
       idToken: token,
-      audience: process.env.GOOGLE_CLIENT_ID
+      audience: process.env.GOOGLE_CLIENT_ID,
     });
 
     const payload = ticket.getPayload();
     console.log('Google payload:', payload); // Debug log
 
     if (!payload || !payload.email) {
-      return res.status(400).json({ 
-        message: 'Invalid Google token or missing email' 
+      return res.status(400).json({
+        message: 'Invalid Google token or missing email',
       });
     }
 
@@ -330,16 +423,18 @@ router.post('/google-signup', async (req, res) => {
 
     if (user) {
       // If user exists, generate token and return
-      const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET, { expiresIn: '24h' });
-      return res.json({ 
-        message: 'User already exists',
-        token,
+      const jwtToken = jwt.sign({ userId: user.id }, process.env.JWT_SECRET, { expiresIn: '24h' });
+
+      return res.json({
+        message: 'User logged in successfully',
+        token: jwtToken,
         user: {
           id: user.id,
           email: user.email,
           firstName: user.firstName,
-          lastName: user.lastName
-        }
+          lastName: user.lastName,
+        },
+        isNewUser: false, // Indicate user already exists
       });
     }
 
@@ -348,16 +443,13 @@ router.post('/google-signup', async (req, res) => {
     let lastName = '';
 
     if (given_name && family_name) {
-      // Use given_name and family_name if available
       firstName = given_name;
       lastName = family_name;
     } else if (name) {
-      // Fall back to splitting full name if available
       const nameParts = name.split(' ');
       firstName = nameParts[0] || '';
       lastName = nameParts.slice(1).join(' ') || '';
     } else {
-      // Last resort: use email prefix as firstName
       firstName = email.split('@')[0];
       lastName = '';
     }
@@ -369,29 +461,29 @@ router.post('/google-signup', async (req, res) => {
         firstName,
         lastName,
         password: '', // Empty password for Google users
-        isVerified: true // Google accounts are pre-verified
-      }
+        isVerified: true, // Google accounts are pre-verified
+      },
     });
 
     // Generate JWT token
     const jwtToken = jwt.sign({ userId: user.id }, process.env.JWT_SECRET, { expiresIn: '24h' });
 
     res.status(201).json({
-      message: 'User created successfully',
+      message: 'User signed up successfully',
       token: jwtToken,
       user: {
         id: user.id,
         email: user.email,
         firstName: user.firstName,
-        lastName: user.lastName
-      }
+        lastName: user.lastName,
+      },
+      isNewUser: true, // Indicate user is new
     });
   } catch (error) {
-    console.error('Google signup error:', error);
-    console.error('Error details:', error.stack); // Add stack trace for debugging
-    res.status(500).json({ 
-      message: 'Error during Google signup', 
-      error: error.message 
+    console.error('Google auth error:', error);
+    res.status(500).json({
+      message: 'Error during Google authentication',
+      error: error.message,
     });
   }
 });
