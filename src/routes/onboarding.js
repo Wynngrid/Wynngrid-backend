@@ -139,7 +139,8 @@ router.post('/complete-profile', authenticateToken, (req, res) => {
             create: typeOfProjects.map(project => ({
               projectType: project.projectType,
               avgArea: project.avgArea,
-              avgValue: project.avgValue
+              avgValue: project.avgValue,
+              specializations: project.specializations || []
             }))
           }
         },
@@ -191,7 +192,8 @@ router.get('/profile', authenticateToken, async (req, res) => {
             id: true,
             projectType: true,
             avgArea: true,
-            avgValue: true
+            avgValue: true,
+            specializations: true
           }
         }
       }
@@ -221,8 +223,7 @@ router.put('/update-profile', authenticateToken, (req, res) => {
     }
 
     try {
-      // console.log('Received body:', req.body);
-      // console.log('Received files:', req.files);
+      console.log('Received files:', req.files); // Debug log
 
       // Get existing profile first
       const existingProfile = await prisma.profile.findUnique({
@@ -234,74 +235,88 @@ router.put('/update-profile', authenticateToken, (req, res) => {
         return res.status(404).json({ message: 'Profile not found' });
       }
 
-      // Prepare update data
       let updateData = {};
 
-      // Handle profile picture update
+      // Handle profile picture
       if (req.files && req.files.profilePic) {
         updateData.profilePicUrl = await uploadToCloudinary(req.files.profilePic[0]);
       }
 
-      // Handle banner images update
+      // Handle professional banner images
       if (req.files && req.files.professionalBannerImages) {
-        const newBannerUrls = await Promise.all(
-          req.files.professionalBannerImages.map(file => uploadToCloudinary(file))
+        // Upload new banner images to Cloudinary
+        const uploadPromises = req.files.professionalBannerImages.map(file => 
+          uploadToCloudinary(file)
         );
+        const newBannerUrls = await Promise.all(uploadPromises);
+
+        // Combine existing banner images with new ones
         updateData.professionalBannerImages = [
           ...existingProfile.professionalBannerImages,
           ...newBannerUrls
         ];
       }
 
-      // Handle other fields only if they are provided
-      if (req.body.businessName) updateData.businessName = req.body.businessName;
-      if (req.body.contactNumber) updateData.contactNumber = req.body.contactNumber;
-      if (req.body.city) updateData.city = req.body.city;
-      if (req.body.serviceProviderType) updateData.serviceProviderType = req.body.serviceProviderType;
-      if (req.body.experienceYears) updateData.experienceYears = req.body.experienceYears;
-      if (req.body.graduationInfo) updateData.graduationInfo = req.body.graduationInfo;
-      if (req.body.associations) updateData.associations = req.body.associations;
-      if (req.body.websiteUrl) updateData.websiteUrl = req.body.websiteUrl;
-      if (req.body.workSetupPreference) updateData.workSetupPreference = req.body.workSetupPreference;
-      if (req.body.preferredTimeline) updateData.preferredTimeline = req.body.preferredTimeline;
-      if (req.body.aboutUs) updateData.aboutUs = req.body.aboutUs;
-      if (req.body.comments) updateData.comments = req.body.comments;
+      // Handle basic fields
+      const basicFields = [
+        'businessName', 'contactNumber', 'city', 'serviceProviderType',
+        'experienceYears', 'graduationInfo', 'associations', 'websiteUrl',
+        'workSetupPreference', 'preferredTimeline', 'aboutUs', 'comments',
+        'fullName'
+      ];
 
-      // Handle arrays
-      if (req.body.portfolioUrls) {
-        updateData.portfolioUrls = typeof req.body.portfolioUrls === 'string' 
-          ? JSON.parse(req.body.portfolioUrls)
-          : req.body.portfolioUrls;
+      basicFields.forEach(field => {
+        if (req.body[field]) updateData[field] = req.body[field];
+      });
+
+      // Handle projectAverages update
+      if (req.body.projectAverages) {
+        try {
+          const projectAverages = typeof req.body.projectAverages === 'string'
+            ? JSON.parse(req.body.projectAverages)
+            : req.body.projectAverages;
+
+          await prisma.projectAverage.deleteMany({
+            where: { profileId: existingProfile.id }
+          });
+
+          updateData.projectAverages = {
+            create: projectAverages.map(project => ({
+              projectType: project.projectType,
+              avgArea: project.avgArea.toString(),
+              avgValue: project.avgValue.toString(),
+              specializations: Array.isArray(project.specializations)
+                ? project.specializations
+                : (typeof project.specializations === 'string'
+                  ? project.specializations.split(',').map(s => s.trim())
+                  : [])
+            }))
+          };
+        } catch (error) {
+          console.error('Error processing projectAverages:', error);
+          return res.status(400).json({
+            message: 'Invalid projectAverages format',
+            error: error.message
+          });
+        }
       }
 
-      if (req.body.typeOfProjects) {
-        const typeOfProjects = typeof req.body.typeOfProjects === 'string'
-          ? JSON.parse(req.body.typeOfProjects)
-          : req.body.typeOfProjects;
+      console.log('Final updateData:', updateData); // Debug log
 
-        updateData.projectAverages = {
-          deleteMany: {},
-          create: typeOfProjects.map(project => ({
-            projectType: project.projectType,
-            avgArea: project.avgArea,
-            avgValue: project.avgValue
-          }))
-        };
-      }
-
-      // Handle new required fields if provided
-      if (req.body.fullName) updateData.fullName = req.body.fullName;
-      if (req.body.preferredWorkLocations) {
-        updateData.preferredWorkLocations = typeof req.body.preferredWorkLocations === 'string'
-          ? JSON.parse(req.body.preferredWorkLocations)
-          : req.body.preferredWorkLocations;
-      }
-
+      // Perform the update
       const updatedProfile = await prisma.profile.update({
         where: { userId: req.user.userId },
         data: updateData,
         include: {
-          projectAverages: true
+          projectAverages: {
+            select: {
+              id: true,
+              projectType: true,
+              avgArea: true,
+              avgValue: true,
+              specializations: true
+            }
+          }
         }
       });
 
@@ -309,11 +324,12 @@ router.put('/update-profile', authenticateToken, (req, res) => {
         message: 'Profile updated successfully',
         profile: updatedProfile
       });
+
     } catch (error) {
       console.error('Update error:', error);
-      res.status(500).json({ 
-        message: 'Error updating profile', 
-        error: error.message 
+      res.status(500).json({
+        message: 'Error updating profile',
+        error: error.message
       });
     }
   });
@@ -375,7 +391,8 @@ router.get('/user-details', authenticateToken, async (req, res) => {
                 id: true,
                 projectType: true,
                 avgArea: true,
-                avgValue: true
+                avgValue: true,
+                specializations: true
               }
             }
           }
