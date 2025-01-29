@@ -223,6 +223,7 @@ router.put('/update-profile', authenticateToken, (req, res) => {
     }
 
     try {
+      console.log('Received body:', req.body); // Debug log
       console.log('Received files:', req.files); // Debug log
 
       // Get existing profile first
@@ -244,13 +245,11 @@ router.put('/update-profile', authenticateToken, (req, res) => {
 
       // Handle professional banner images
       if (req.files && req.files.professionalBannerImages) {
-        // Upload new banner images to Cloudinary
         const uploadPromises = req.files.professionalBannerImages.map(file => 
           uploadToCloudinary(file)
         );
         const newBannerUrls = await Promise.all(uploadPromises);
 
-        // Combine existing banner images with new ones
         updateData.professionalBannerImages = [
           ...existingProfile.professionalBannerImages,
           ...newBannerUrls
@@ -268,6 +267,36 @@ router.put('/update-profile', authenticateToken, (req, res) => {
       basicFields.forEach(field => {
         if (req.body[field]) updateData[field] = req.body[field];
       });
+
+      // Handle preferredWorkLocations
+      if (req.body.preferredWorkLocations) {
+        try {
+          updateData.preferredWorkLocations = typeof req.body.preferredWorkLocations === 'string'
+            ? JSON.parse(req.body.preferredWorkLocations)
+            : req.body.preferredWorkLocations;
+        } catch (parseError) {
+          console.error('Error parsing preferredWorkLocations:', parseError);
+          return res.status(400).json({
+            message: 'Invalid preferredWorkLocations format',
+            error: parseError.message
+          });
+        }
+      }
+
+      // Handle portfolioUrls
+      if (req.body.portfolioUrls) {
+        try {
+          updateData.portfolioUrls = typeof req.body.portfolioUrls === 'string'
+            ? JSON.parse(req.body.portfolioUrls)
+            : req.body.portfolioUrls;
+        } catch (parseError) {
+          console.error('Error parsing portfolioUrls:', parseError);
+          return res.status(400).json({
+            message: 'Invalid portfolioUrls format',
+            error: parseError.message
+          });
+        }
+      }
 
       // Handle projectAverages update
       if (req.body.projectAverages) {
