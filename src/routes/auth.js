@@ -52,7 +52,26 @@ router.post('/signup', async (req, res) => {
       });
 
       // Send email with new OTP
-      await sendEmail(email, 'Verify your email', `Your OTP is: ${otp}. This OTP is valid for 10 minutes. Please use it to verify your email address.`);
+      //await sendEmail(email, 'Verify your email', `Your OTP is: ${otp}. This OTP is valid for 10 minutes. Please use it to verify your email address.`);
+      // Send email with OTP
+await sendEmail(email, 'Verify your email', `
+  <h2 style="color: #333;">Welcome to Wynngrid!</h2>
+  <div style="font-family: Arial, sans-serif; padding: 20px; max-width: 600px; margin: auto; border: 1px solid #ddd; border-radius: 8px;">
+    
+  
+    
+    <h2 style="color: #001f3f; text-align: center;">Verification Code</h2>
+    <p style="font-size: 16px; color: #333; text-align: center;">Please use the verification code below to sign in.This OTP is valid for 10 minutes.</p>
+    
+    <div style="text-align: center; font-size: 25px; font-weight: bold; margin: 20px 0;">
+      ${otp}
+    </div>
+
+    <p style="color: #555; text-align: center;">If you didn’t request this, you can ignore this email.</p>
+
+    <p style="text-align: center;">Thanks,<br><strong>Team Wynngrid</strong></p>
+  </div>
+`);
 
       return res.status(200).json({ 
         message: 'New verification OTP has been sent to your email.' 
@@ -82,8 +101,25 @@ router.post('/signup', async (req, res) => {
     });
 
     // Send email with OTP
-    await sendEmail(email, 'Verify your email', `Your OTP is: ${otp}. This OTP is valid for 10 minutes. Please use it to verify your email address.`);
-
+    //await sendEmail(email, 'Verify your email', `Your OTP is: ${otp}. This OTP is valid for 10 minutes. Please use it to verify your email address.`);
+    await sendEmail(email, 'Verify your email', `
+      <h2 style="color: #333;">Welcome to Wynngrid!</h2>
+      <div style="font-family: Arial, sans-serif; padding: 20px; max-width: 600px; margin: auto; border: 1px solid #ddd; border-radius: 8px;">
+        
+      
+        
+        <h2 style="color: #001f3f; text-align: center;">Verification Code</h2>
+        <p style="font-size: 16px; color: #333; text-align: center;">Please use the verification code below to sign in.This OTP is valid for 10 minutes.</p>
+        
+        <div style="text-align: center; font-size: 25px; font-weight: bold; margin: 20px 0;">
+          ${otp}
+        </div>
+    
+        <p style="color: #555; text-align: center;">If you didn’t request this, you can ignore this email.</p>
+    
+        <p style="text-align: center;">Thanks,<br><strong>Team Wynngrid</strong></p>
+      </div>
+    `);
     res.status(201).json({ message: 'User created. Please verify your email.' });
   } catch (error) {
     console.error('Error during signup:', error);
@@ -168,8 +204,25 @@ router.post('/forgot-password', async (req, res) => {
       data: { otp, otpExpiry },
     });
 
-    await sendEmail(email, 'Reset Password', `Your password reset OTP is: ${otp}. This OTP is valid for 10 minutes. Please use it to reset your password.`);
-
+    //await sendEmail(email, 'Reset Password', `Your password reset OTP is: ${otp}. This OTP is valid for 10 minutes. Please use it to reset your password.`);
+    await sendEmail(email, 'Reset Password', `
+      <h2 style="color: #333;">Welcome to Wynngrid!</h2>
+      <div style="font-family: Arial, sans-serif; padding: 20px; max-width: 600px; margin: auto; border: 1px solid #ddd; border-radius: 8px;">
+        
+      
+        
+        <h2 style="color: #001f3f; text-align: center;">Verification Code</h2>
+        <p style="font-size: 16px; color: #333; text-align: center;">Please use the verification code below to sign in.This OTP is valid for 10 minutes.</p>
+        
+        <div style="text-align: center; font-size: 22px; font-weight: bold; margin: 20px 0;">
+          ${otp}
+        </div>
+    
+        <p style="color: #555; text-align: center;">If you didn’t request this, you can ignore this email.</p>
+    
+        <p style="text-align: center;">Thanks,<br><strong>Team Wynngrid</strong></p>
+      </div>
+    `);
     res.json({ message: 'Password reset OTP sent to email' });
   } catch (error) {
     res.status(500).json({ message: 'Error processing request', error: error.message });
@@ -395,7 +448,6 @@ router.post('/logout', async (req, res) => {
 //     });
 //   }
 // });
-
 // Google Sign-up/Login
 router.post('/google-auth', async (req, res) => {
   try {
@@ -487,6 +539,7 @@ router.post('/google-auth', async (req, res) => {
     });
   }
 });
+
 
 // Google Sign-in
 router.post('/google-signin', async (req, res) => {

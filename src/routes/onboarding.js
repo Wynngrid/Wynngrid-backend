@@ -154,10 +154,35 @@ router.post('/complete-profile', authenticateToken, (req, res) => {
         where: { id: req.user.userId }
       });
 
+    // await sendEmail(
+    //   user.email,
+    //   'Onboarding Complete',
+    //   'Thank you for completing your onboarding process. We appreciate you believing in us!'
+    // );
     await sendEmail(
       user.email,
       'Onboarding Complete',
-      'Thank you for completing your onboarding process. We appreciate you believing in us!'
+      `
+        <div style="font-family: Arial, sans-serif; text-align: center; padding: 20px; background-color: #f4f4f4;">
+          
+      
+    
+          <div style="background-color: white; padding: 20px; border-radius: 8px; max-width: 600px; margin: auto;">
+            
+            <h2 style="color: #001f3f;">Hi! ${user.firstName} ${user.lastName},</h2>
+            <p style="font-size: 16px; color: #333;">Welcome to <strong>Team Wynngrid!</strong></p>
+            <p style="font-size: 16px; color: #333;">Your onboarding was successful.</p>
+            <p style="font-size: 16px; color: #333;">Thank you for trusting us</p>
+            <p style="font-size: 16px; color: #333;">We're excited to achieve great things together!</p>
+            <hr style="border: 1px solid #ddd;">
+    
+            
+          </div>
+    
+          
+          
+        </div>
+      `
     );
       res.status(201).json({
         message: 'Profile completed successfully',
