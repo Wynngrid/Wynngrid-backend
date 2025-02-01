@@ -7,6 +7,7 @@ import projectRoutes from './routes/project.js';
 import contactRoutes from './routes/contact.js';
 import helmet from 'helmet';
 import compression from 'compression';
+import notifyUserRouter from './routes/notifyuser.js';
 
 dotenv.config();
 
@@ -22,6 +23,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/onboarding', onboardingRoutes);
 app.use('/api/projects', projectRoutes);
 app.use('/api/contact', contactRoutes);
+app.use('/api/notifyuser', notifyUserRouter);
 
 
 // Root route
