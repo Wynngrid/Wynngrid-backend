@@ -22,7 +22,12 @@ const validatePassword = (password) => {
 // Signup
 router.post('/signup', async (req, res) => {
   try {
-    const { firstName, lastName, email, password } = req.body;
+    const { firstName, lastName, email, password, userType } = req.body;
+
+    // Validate userType
+    if (userType !== 'normal' && userType !== 'pro') {
+      return res.status(400).json({ message: 'Invalid user type. Must be "normal" or "pro".' });
+    }
 
     // Validate password
     if (!validatePassword(password)) {
@@ -67,7 +72,7 @@ await sendEmail(email, 'Verify your email', `
       ${otp}
     </div>
 
-    <p style="color: #555; text-align: center;">If you didn’t request this, you can ignore this email.</p>
+    <p style="color: #555; text-align: center;">If you didn't request this, you can ignore this email.</p>
 
     <p style="text-align: center;">Thanks,<br><strong>Team Wynngrid</strong></p>
   </div>
@@ -97,6 +102,7 @@ await sendEmail(email, 'Verify your email', `
         password: hashedPassword,
         otp,
         otpExpiry,
+        userType,
       },
     });
 
@@ -115,7 +121,7 @@ await sendEmail(email, 'Verify your email', `
           ${otp}
         </div>
     
-        <p style="color: #555; text-align: center;">If you didn’t request this, you can ignore this email.</p>
+        <p style="color: #555; text-align: center;">If you didn't request this, you can ignore this email.</p>
     
         <p style="text-align: center;">Thanks,<br><strong>Team Wynngrid</strong></p>
       </div>
@@ -149,11 +155,11 @@ router.post('/verify-otp', async (req, res) => {
       data: { isVerified: true, otp: null, otpExpiry: null },
     });
 
-    // Generate a JWT token
-    const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET, { expiresIn: '240h' });
+    // Generate a JWT token including userType
+    const token = jwt.sign({ userId: user.id, userType: user.userType }, process.env.JWT_SECRET, { expiresIn: '240h' });
 
     // Respond with a success message and the token
-    res.json({ message: 'Email verified successfully', token });
+    res.json({ message: 'Email verified successfully', token, userType: user.userType });
   } catch (error) {
     console.error('Error during OTP verification:', error);
     res.status(500).json({ message: 'Error verifying OTP', error: error.message });
@@ -179,8 +185,9 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ message: 'Invalid password' });
     }
 
-    const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET, { expiresIn: '240h' });
-    res.json({ token });
+    // Include userType in the token payload
+    const token = jwt.sign({ userId: user.id, userType: user.userType }, process.env.JWT_SECRET, { expiresIn: '240h' });
+    res.json({ token, userType: user.userType }); // Return userType
   } catch (error) {
     res.status(500).json({ message: 'Error logging in', error: error.message });
   }
@@ -218,7 +225,7 @@ router.post('/forgot-password', async (req, res) => {
           ${otp}
         </div>
     
-        <p style="color: #555; text-align: center;">If you didn’t request this, you can ignore this email.</p>
+        <p style="color: #555; text-align: center;">If you didn't request this, you can ignore this email.</p>
     
         <p style="text-align: center;">Thanks,<br><strong>Team Wynngrid</strong></p>
       </div>
@@ -451,7 +458,7 @@ router.post('/logout', async (req, res) => {
 // Google Sign-up/Login
 router.post('/google-auth', async (req, res) => {
   try {
-    const { token } = req.body;
+    const { token, userType } = req.body;
 
     // Verify Google token
     const ticket = await client.verifyIdToken({
@@ -460,8 +467,6 @@ router.post('/google-auth', async (req, res) => {
     });
 
     const payload = ticket.getPayload();
-    console.log('Google payload:', payload); // Debug log
-
     if (!payload || !payload.email) {
       return res.status(400).json({
         message: 'Invalid Google token or missing email',
@@ -475,7 +480,7 @@ router.post('/google-auth', async (req, res) => {
 
     if (user) {
       // If user exists, generate token and return
-      const jwtToken = jwt.sign({ userId: user.id }, process.env.JWT_SECRET, { expiresIn: '24h' });
+      const jwtToken = jwt.sign({ userId: user.id, userType: user.userType }, process.env.JWT_SECRET, { expiresIn: '24h' });
 
       return res.json({
         message: 'User logged in successfully',
@@ -486,6 +491,7 @@ router.post('/google-auth', async (req, res) => {
           firstName: user.firstName,
           lastName: user.lastName,
         },
+        userType: user.userType, // Include userType
         isNewUser: false, // Indicate user already exists
       });
     }
@@ -506,7 +512,7 @@ router.post('/google-auth', async (req, res) => {
       lastName = '';
     }
 
-    // Create new user
+    // Create new user with userType
     user = await prisma.user.create({
       data: {
         email,
@@ -514,11 +520,12 @@ router.post('/google-auth', async (req, res) => {
         lastName,
         password: '', // Empty password for Google users
         isVerified: true, // Google accounts are pre-verified
+        userType: userType === 'pro' ? 'pro' : 'normal', // Set userType based on request
       },
     });
 
     // Generate JWT token
-    const jwtToken = jwt.sign({ userId: user.id }, process.env.JWT_SECRET, { expiresIn: '24h' });
+    const jwtToken = jwt.sign({ userId: user.id, userType: user.userType }, process.env.JWT_SECRET, { expiresIn: '24h' });
 
     res.status(201).json({
       message: 'User signed up successfully',
@@ -529,6 +536,7 @@ router.post('/google-auth', async (req, res) => {
         firstName: user.firstName,
         lastName: user.lastName,
       },
+      userType: user.userType, // Include userType
       isNewUser: true, // Indicate user is new
     });
   } catch (error) {

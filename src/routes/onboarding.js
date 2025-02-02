@@ -1,6 +1,6 @@
 import express from 'express';
 import { PrismaClient } from '@prisma/client';
-import { authenticateToken } from '../middleware/auth.js';
+import { authenticateToken, authorizeProUser } from '../middleware/auth.js';
 import { sendEmail } from '../utils/email.js';
 import multer from 'multer';
 import { uploadToCloudinary } from '../utils/cloudinary.js';
@@ -46,7 +46,7 @@ const upload = multer({
 ]);
 
 // Complete onboarding profile
-router.post('/complete-profile', authenticateToken, (req, res) => {
+router.post('/complete-profile', authenticateToken, authorizeProUser, (req, res) => {
   upload(req, res, async function(err) {
     if (err instanceof multer.MulterError) {
       return res.status(400).json({ message: err.message });
@@ -184,6 +184,7 @@ router.post('/complete-profile', authenticateToken, (req, res) => {
         </div>
       `
     );
+    
       res.status(201).json({
         message: 'Profile completed successfully',
         profile
@@ -239,7 +240,7 @@ router.get('/profile', authenticateToken, async (req, res) => {
 });
 
 // Update profile
-router.put('/update-profile', authenticateToken, (req, res) => {
+router.put('/update-profile', authenticateToken, authorizeProUser, (req, res) => {
   upload(req, res, async function(err) {
     if (err instanceof multer.MulterError) {
       return res.status(400).json({ message: err.message });

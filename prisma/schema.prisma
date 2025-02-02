@@ -20,6 +20,7 @@ model User {
   updatedAt     DateTime  @updatedAt
   profile       Profile?
   projects      Project[]
+  userType      String    @default("normal")
 }
 
 model Profile {

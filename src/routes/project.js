@@ -1,6 +1,6 @@
 import express from 'express';
 import { PrismaClient } from '@prisma/client';
-import { authenticateToken } from '../middleware/auth.js';
+import { authenticateToken, authorizeProUser } from '../middleware/auth.js';
 import multer from 'multer';
 import { uploadToCloudinary } from '../utils/cloudinary.js';
 import fs from 'fs';
@@ -57,8 +57,8 @@ router.get('/:id', authenticateToken, async (req, res) => {
   }
 });
 
-// Create a new project
-router.post('/', authenticateToken, upload.array('images', 10), async (req, res) => {
+// Create a new project (only for pro users)
+router.post('/', authenticateToken, authorizeProUser, upload.array('images', 10), async (req, res) => {
   try {
     const { name, location, area, jobCost, projectType, description } = req.body;
 
@@ -128,8 +128,8 @@ router.post('/', authenticateToken, upload.array('images', 10), async (req, res)
   }
 });
 
-// Update a project
-router.put('/:id', authenticateToken, upload.array('images', 10), async (req, res) => {
+// Update a project (only for pro users)
+router.put('/:id', authenticateToken, authorizeProUser, upload.array('images', 10), async (req, res) => {
   try {
     const { name, location, area, jobCost, projectType, description } = req.body;
 
@@ -207,8 +207,8 @@ router.put('/:id', authenticateToken, upload.array('images', 10), async (req, re
   }
 });
 
-// Delete a project
-router.delete('/:id', authenticateToken, async (req, res) => {
+// Delete a project (only for pro users)
+router.delete('/:id', authenticateToken, authorizeProUser, async (req, res) => {
   try {
     // Check if project exists and belongs to user
     const project = await prisma.project.findFirst({
@@ -235,8 +235,8 @@ router.delete('/:id', authenticateToken, async (req, res) => {
   }
 });
 
-// Delete a specific image from a project
-router.delete('/:id/images/:index', authenticateToken, async (req, res) => {
+// Delete a specific image from a project (only for pro users)
+router.delete('/:id/images/:index', authenticateToken, authorizeProUser, async (req, res) => {
   try {
     const { id, index } = req.params;
     const indexNum = parseInt(index);
