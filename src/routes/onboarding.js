@@ -429,13 +429,14 @@ router.delete('/delete-profile', authenticateToken, async (req, res) => {
   }
 });
 
-// Get user details with userType
+// Get user details with userType and project averages
 router.get('/user-details', authenticateToken, async (req, res) => {
   try {
     const user = await prisma.user.findUnique({
       where: { id: req.user.userId },
       include: {
         profile: true, // Include onboarding details
+        projectAverages: true, // Include project averages
       },
     });
 
@@ -451,6 +452,7 @@ router.get('/user-details', authenticateToken, async (req, res) => {
       email: user.email,
       userType: user.userType, // Include userType
       profile: user.profile, // Include onboarding details
+      projectAverages: user.projectAverages, // Include project averages
     });
   } catch (error) {
     console.error('Error fetching user details:', error);
