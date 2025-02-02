@@ -429,42 +429,34 @@ router.delete('/delete-profile', authenticateToken, async (req, res) => {
   }
 });
 
-// Get user details with profile
+// Get user details with userType
 router.get('/user-details', authenticateToken, async (req, res) => {
   try {
-    const userWithProfile = await prisma.user.findUnique({
+    const user = await prisma.user.findUnique({
       where: { id: req.user.userId },
-      select: {
-        id: true,
-        firstName: true,
-        lastName: true,
-        email: true,
-        profile: {
-          include: {
-            projectAverages: {
-              select: {
-                id: true,
-                projectType: true,
-                avgArea: true,
-                avgValue: true,
-                specializations: true
-              }
-            }
-          }
-        }
-      }
+      include: {
+        profile: true, // Include onboarding details
+      },
     });
 
-    if (!userWithProfile) {
+    if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
 
-    res.json(userWithProfile);
+    // Include userType in the response
+    res.json({
+      id: user.id,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      email: user.email,
+      userType: user.userType, // Include userType
+      profile: user.profile, // Include onboarding details
+    });
   } catch (error) {
     console.error('Error fetching user details:', error);
-    res.status(500).json({ 
-      message: 'Error fetching user details', 
-      error: error.message 
+    res.status(500).json({
+      message: 'Error fetching user details',
+      error: error.message,
     });
   }
 });
